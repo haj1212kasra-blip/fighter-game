@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Fighter Game — Prototype 0.1</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="hud">
+    <div class="top-left">
+      <div>SPEED <span id="speed">0</span></div>
+      <div>ALT <span id="altitude">0</span></div>
+    </div>
+
+    <div class="crosshair">+</div>
+
+    <div class="bottom-center">
+      <div id="heading">HDG 000</div>
+      <div id="status">READY</div>
+    </div>
+
+    <div id="controls">
+      <div id="stick">
+        <div id="knob"></div>
+      </div>
+      <button id="throttleUp">▲</button>
+      <button id="throttleDown">▼</button>
+    </div>
+  </div>
+
+  <div id="loading">در حال بارگذاری...</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script type="module" src="game.js"></script>
+</body>
+</html>
