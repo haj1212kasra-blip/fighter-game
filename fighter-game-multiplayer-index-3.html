@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Fighter Game Multiplayer</title>
+<style>
+*{box-sizing:border-box;touch-action:none;-webkit-user-select:none;user-select:none}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#071522;font-family:Arial,sans-serif}
+canvas{display:block}
+#menu{position:fixed;inset:0;z-index:20;background:#071522ee;color:#67e8f9;display:flex;align-items:center;justify-content:center}
+.panel{width:min(92vw,430px);padding:22px;border:1px solid #67e8f9;border-radius:18px;background:#071b27ee;text-align:center}
+h1{margin:0 0 18px;font-size:27px}.row{display:flex;gap:8px;margin:9px 0}
+input,select,button{font:inherit;border-radius:10px;border:1px solid #67e8f9;padding:12px;background:#09202b;color:#67e8f9}
+input,select{width:100%}button{cursor:pointer}.primary{width:100%;margin-top:8px}
+#roomInfo{margin-top:15px;line-height:1.8}.players{font-size:14px;margin-top:8px}
+#hud{position:fixed;inset:0;color:#67e8f9;text-shadow:0 0 7px #67e8f9;font-weight:bold;pointer-events:none}
+#stats{position:absolute;top:12px;left:14px;direction:ltr;line-height:1.65;font-size:14px}
+#cross{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:28px}
+#heading{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);direction:ltr;font-size:14px}
+#joystick{position:absolute;left:22px;bottom:22px;width:125px;height:125px;border:2px solid #67e8f9;border-radius:50%;background:#12313a66;pointer-events:auto}
+#knob{position:absolute;left:50%;top:50%;width:54px;height:54px;transform:translate(-50%,-50%);border:2px solid #67e8f9;border-radius:50%;background:#67e8f933}
+.btn{position:absolute;right:22px;width:65px;height:65px;border:1px solid #67e8f9;border-radius:14px;background:#061923cc;color:#67e8f9;font-size:25px;pointer-events:auto}
+#up{bottom:97px}#down{bottom:22px}
+#status{position:absolute;top:12px;right:14px;font-size:13px}
+#portrait{display:none;position:fixed;inset:0;z-index:30;background:#071522;color:#67e8f9;align-items:center;justify-content:center;text-align:center;font-size:20px}
+.hidden{display:none!important}
+.small{opacity:.8;font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<div id="portrait">📱<br><br>گوشی را افقی کنید</div>
+
+<div id="menu">
+<div class="panel">
+<h1>✈️ FIGHTER ONLINE</h1>
+<input id="name" maxlength="16" placeholder="نام خلبان">
+<div class="row">
+<select id="mode"><option value="squadron">Mode 1 — Squadron</option><option value="ffa">Mode 2 — FFA</option></select>
+<select id="duration"><option value="2">2 دقیقه</option><option value="4" selected>4 دقیقه</option><option value="6">6 دقیقه</option><option value="10">10 دقیقه</option></select>
+</div>
+<select id="map"><option value="1">Map 1</option><option value="2">Map 2</option><option value="3">Map 3</option><option value="4">Map 4</option><option value="5">Map 5</option><option value="6">Map 6</option><option value="7">Map 7</option><option value="8">Map 8</option><option value="9">Map 9</option><option value="10">Map 10</option></select>
+<button class="primary" id="create">ساخت اتاق</button>
+<div class="row"><input id="code" maxlength="5" placeholder="کد اتاق"><button id="join">ورود</button></div>
+<div id="roomInfo"></div>
+<div class="small">نسخه Multiplayer V1 — حداکثر ۲۰ بازیکن</div>
+</div>
+</div>
+
+<div id="hud" class="hidden">
+<div id="stats">SPEED <span id="speed">180</span><br>ALT <span id="alt">500</span><br>THR <span id="thr">45</span>%</div>
+<div id="status">ONLINE</div>
+<div id="cross">+</div>
+<div id="heading">HDG <span id="hdg">000</span></div>
+<div id="joystick"><div id="knob"></div></div>
+<button class="btn" id="up">▲</button><button class="btn" id="down">▼</button>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from "three";
+const socket=io();
+const $=id=>document.getElementById(id);
+let room=null, started=false, others=new Map();
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x071522);
+scene.fog=new THREE.Fog(0x071522,500,2600);
+const camera=new THREE.PerspectiveCamera(70,innerWidth/innerHeight,.1,6000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5)); renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xbdefff,0x17221b,2));
+const sun=new THREE.DirectionalLight(0xffffff,2);sun.position.set(400,700,300);scene.add(sun);
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(5000,5000),new THREE.MeshStandardMaterial({color:0x1b2922}));
+ground.rotation.x=-Math.PI/2;ground.position.y=-300;scene.add(ground);
+const grid=new THREE.GridHelper(5000,100,0x31515b,0x1b3037);grid.position.y=-299;scene.add(grid);
+
+function makeJet(){
+ const g=new THREE.Group(),m=new THREE.MeshStandardMaterial({color:0x8b969c,metalness:.7,roughness:.35}),d=new THREE.MeshStandardMaterial({color:0x5d686f,metalness:.6});
+ const b=new THREE.Mesh(new THREE.ConeGeometry(10,72,8),m);b.rotation.x=Math.PI/2;g.add(b);
+ const n=new THREE.Mesh(new THREE.ConeGeometry(5,24,8),m);n.rotation.x=-Math.PI/2;n.position.z=-47;g.add(n);
+ const s=new THREE.Shape();s.moveTo(0,0);s.lineTo(-62,0);s.lineTo(-10,-25);s.lineTo(0,0);
+ const lw=new THREE.Mesh(new THREE.ShapeGeometry(s),d);lw.rotation.x=-Math.PI/2;lw.position.y=2;g.add(lw);const rw=lw.clone();rw.scale.x=-1;g.add(rw);
+ const t=new THREE.Mesh(new THREE.BoxGeometry(5,25,18),d);t.position.set(0,15,28);t.rotation.x=-.25;g.add(t);
+ return g;
+}
+const jet=makeJet();scene.add(jet);
+
+let speed=180,throttle=.45,yaw=0,pitch=0,roll=0,ix=0,iy=0,pid=null,lastSend=0;
+const stick=$("joystick"),knob=$("knob");
+function sm(x,y){const r=stick.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,max=r.width*.37;let dx=x-cx,dy=y-cy,d=Math.hypot(dx,dy);if(d>max){dx=dx/d*max;dy=dy/d*max}ix=dx/max;iy=dy/max;knob.style.left=`calc(50% + ${dx}px)`;knob.style.top=`calc(50% + ${dy}px)`}
+function sr(){pid=null;ix=iy=0;knob.style.left="50%";knob.style.top="50%"}
+stick.addEventListener("pointerdown",e=>{pid=e.pointerId;stick.setPointerCapture(pid);sm(e.clientX,e.clientY)});
+stick.addEventListener("pointermove",e=>{if(e.pointerId===pid)sm(e.clientX,e.clientY)});
+stick.addEventListener("pointerup",sr);stick.addEventListener("pointercancel",sr);
+$("up").addEventListener("pointerdown",()=>throttle=Math.min(1,throttle+.05));
+$("down").addEventListener("pointerdown",()=>throttle=Math.max(0,throttle-.05));
+
+function name(){return ($("name").value.trim()||"Pilot").slice(0,16)}
+function showRoom(r){
+ room=r;
+ $("roomInfo").innerHTML=`کد اتاق: <b style="font-size:24px">${r.code}</b><br>بازیکنان: ${r.players.length}/20<div class="players">${r.players.map(p=>`${p.name} ${p.commander?"👑":""} ${p.team}`).join("<br>")}</div>`;
+ if(r.owner===socket.id && !r.started){
+   const b=document.createElement("button");b.className="primary";b.textContent="شروع بازی";b.onclick=()=>socket.emit("room:start");
+   $("roomInfo").appendChild(b);
+ }
+}
+$("create").onclick=()=>{
+ socket.emit("room:create",{name:name(),mode:$("mode").value,duration:+$("duration").value,map:+$("map").value},res=>{
+   if(!res.ok) alert(res.error||"خطا");
+ });
+};
+$("join").onclick=()=>{
+ socket.emit("room:join",{name:name(),code:$("code").value},res=>{
+   if(!res.ok) alert(res.error||"خطا");
+ });
+};
+socket.on("room:created",showRoom);
+socket.on("room:update",showRoom);
+socket.on("game:start",r=>{
+ room=r;started=true;$("menu").classList.add("hidden");$("hud").classList.remove("hidden");
+});
+socket.on("player:state",s=>{
+ let j=others.get(s.id);
+ if(!j){j=makeJet();scene.add(j);others.set(s.id,j)}
+ j.position.set(s.x,s.y,s.z);j.rotation.set(s.rx,s.ry,s.rz);
+});
+socket.on("disconnect",()=>{$("status").textContent="OFFLINE"});
+socket.on("connect",()=>{$("status").textContent="ONLINE"});
+
+const clock=new THREE.Clock();
+function animate(){
+ requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05);
+ if(started){
+  const target=80+throttle*420;speed=THREE.MathUtils.lerp(speed,target,dt*2.5);
+  pitch=THREE.MathUtils.lerp(pitch,-iy*.5,dt*5);roll=THREE.MathUtils.lerp(roll,-ix*.7,dt*5);yaw+=ix*dt*.9;
+  jet.rotation.set(pitch,yaw,roll);
+  const f=new THREE.Vector3(0,0,-1).applyQuaternion(jet.quaternion);jet.position.addScaledVector(f,speed*dt*.35);jet.position.y=Math.max(jet.position.y,-200);
+  const co=new THREE.Vector3(0,40,130).applyQuaternion(jet.quaternion);camera.position.lerp(jet.position.clone().add(co),1-Math.pow(.001,dt));camera.lookAt(jet.position.clone().addScaledVector(f,130));
+  $("speed").textContent=Math.round(speed);$("alt").textContent=Math.round(jet.position.y+300);$("thr").textContent=Math.round(throttle*100);
+  $("hdg").textContent=String(Math.round((THREE.MathUtils.radToDeg(yaw)%360+360)%360)).padStart(3,"0");
+  if(performance.now()-lastSend>50){
+    lastSend=performance.now();
+    socket.emit("player:state",{x:jet.position.x,y:jet.position.y,z:jet.position.z,rx:jet.rotation.x,ry:jet.rotation.y,rz:jet.rotation.z,speed});
+  }
+ }
+ renderer.render(scene,camera);
+}
+addEventListener("resize",()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+function orient(){$("portrait").style.display=innerHeight>innerWidth?"flex":"none"}orient();addEventListener("resize",orient);
+animate();
+</script>
+</body>
+</html>
